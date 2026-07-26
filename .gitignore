@@ -1,0 +1,18 @@
+# Python缓存
+__pycache__/
+*.py[cod]
+
+# Python虚拟环境
+.venv/
+
+# VS Code配置
+.vscode/
+
+# SQLite数据库
+*.db
+
+# Excel临时文件
+~$*.xlsx
+
+# 自动生成报告
+reports/
