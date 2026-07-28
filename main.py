@@ -1,24 +1,15 @@
 import sys
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel
-from PySide6.QtCore import Qt
+from pathlib import Path
+from PySide6.QtWidgets import QApplication
+from ui.main_window import MainWindow
 
+def main():
+    app = QApplication(sys.argv)
+    style = Path(__file__).parent / "styles" / "dark.qss"
+    app.setStyleSheet(style.read_text(encoding="utf-8"))
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-
-        self.setWindowTitle("LogiBox 物流工程效率工具箱 V0.1")
-        self.resize(1000, 650)
-
-        label = QLabel("欢迎使用 LogiBox！")
-        label.setAlignment(Qt.AlignCenter)
-
-        self.setCentralWidget(label)
-
-
-app = QApplication(sys.argv)
-
-window = MainWindow()
-window.show()
-
-app.exec()
+if __name__ == "__main__":
+    main()

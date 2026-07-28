@@ -1,0 +1,151 @@
+* {
+    font-family: "Microsoft YaHei";
+}
+
+QMainWindow, QWidget {
+    background: #1E1E1E;
+    color: #EDEDED;
+}
+
+#sidebar {
+    background: #252526;
+    border-right: 1px solid #333333;
+}
+
+#logoTitle {
+    color: #FFFFFF;
+    font-size: 27px;
+    font-weight: 700;
+}
+
+#logoSubtitle, #versionLabel, #topbarHint, #pageDescription, #mutedLabel {
+    color: #9D9D9D;
+}
+
+#sidebarMenu {
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 14px;
+}
+
+#sidebarMenu::item {
+    height: 44px;
+    padding: 0 12px;
+    border-radius: 8px;
+}
+
+#sidebarMenu::item:hover {
+    background: #333337;
+}
+
+#sidebarMenu::item:selected {
+    background: #0E639C;
+    color: #FFFFFF;
+}
+
+#topbar {
+    background: #252526;
+    border-bottom: 1px solid #333333;
+}
+
+#topbarTitle {
+    color: #F3F3F3;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+#heroCard, #panelCard, #metricCard, #functionCard {
+    background: #2D2D30;
+    border: 1px solid #414141;
+    border-radius: 14px;
+}
+
+#functionCard:hover {
+    border: 1px solid #0E8AD9;
+    background: #323236;
+}
+
+#heroTitle {
+    color: #FFFFFF;
+    font-size: 23px;
+    font-weight: 600;
+}
+
+#heroText, #cardDescription {
+    color: #AFAFAF;
+}
+
+#cardIcon {
+    font-size: 38px;
+}
+
+#cardTitle {
+    color: #FFFFFF;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+#panelTitle {
+    color: #FFFFFF;
+    font-size: 19px;
+    font-weight: 600;
+}
+
+QLineEdit {
+    background: #202020;
+    border: 1px solid #4B4B4B;
+    border-radius: 8px;
+    padding: 9px 11px;
+    color: #FFFFFF;
+}
+
+QLineEdit:focus {
+    border: 1px solid #0E8AD9;
+}
+
+QPushButton {
+    background: #0E639C;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background: #1177BB;
+}
+
+QPushButton:pressed {
+    background: #0B547E;
+}
+
+QTableWidget {
+    background: #232323;
+    alternate-background-color: #2A2A2A;
+    border: 1px solid #424242;
+    gridline-color: #3A3A3A;
+    color: #EDEDED;
+    selection-background-color: #0E639C;
+}
+
+QHeaderView::section {
+    background: #2D2D30;
+    color: #FFFFFF;
+    padding: 8px;
+    border: none;
+    border-bottom: 1px solid #444444;
+}
+
+#metricValue, #bigMetric {
+    color: #66C0F4;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QStatusBar {
+    background: #252526;
+    color: #AFAFAF;
+    border-top: 1px solid #333333;
+}
