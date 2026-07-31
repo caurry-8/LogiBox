@@ -1,30 +1,29 @@
 import sys
 from pathlib import Path
 
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
 from ui.main_window import MainWindow
 
 
-def load_theme(app: QApplication) -> None:
-    theme_file = Path(__file__).parent / 'styles' / 'dark.qss'
-    if theme_file.exists():
-        app.setStyleSheet(theme_file.read_text(encoding='utf-8'))
+BASE_DIR = Path(__file__).resolve().parent
 
 
-def main() -> None:
+def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName('LogiBox')
-    app.setApplicationVersion('2.2.0')
-    app.setOrganizationName('LogiBox')
+    app.setApplicationName("LogiBox")
+    app.setApplicationDisplayName("LogiBox · Logistics Analytics Platform")
+    app.setOrganizationName("LogiBox")
+    app.setStyle("Fusion")
 
-    load_theme(app)
+    font = QFont("Microsoft YaHei", 10)
+    app.setFont(font)
 
-    window = MainWindow()
+    window = MainWindow(base_dir=BASE_DIR)
     window.show()
+    return app.exec()
 
-    sys.exit(app.exec())
 
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    sys.exit(main())

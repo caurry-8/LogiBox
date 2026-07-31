@@ -1,0 +1,6 @@
+LogiBox V3.2
+- 保留数据中心、ABC、EOQ、安全库存、报告中心与 About 页面
+- 新增/强化 XYZ 需求稳定性分析
+- Dashboard 与报告中心同步分析快照
+- 深色主题与侧边导航统一优化
+- DataStore 增加 analysis_changed 通知，分析结果更新更及时

@@ -1,97 +1,108 @@
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
+
 from utils.eoq_utils import EOQCalculator
+from utils.data_store import DataStore
+from widgets.metric_card import MetricCard
 
 
 class EOQPage(QWidget):
-    def __init__(self) -> None:
+    def __init__(self, store: DataStore | None = None) -> None:
         super().__init__()
-        root = QVBoxLayout(self)
-        root.setContentsMargins(36, 30, 36, 30)
-        root.setSpacing(18)
+        self.store = store
+        self._build_ui()
 
-        title = QLabel('EOQ 经济订货批量')
-        title.setObjectName('pageTitle')
-        desc = QLabel('输入年需求量、订货成本和库存持有成本，计算 EOQ 与年度相关库存成本。')
-        desc.setObjectName('pageDescription')
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(34, 28, 34, 22)
+        root.setSpacing(14)
+
+        title = QLabel("EOQ 经济订货批量")
+        title.setObjectName("pageTitle")
+        desc = QLabel("快速计算经济订货批量、订货频率与年度相关库存成本。")
+        desc.setObjectName("pageDescription")
         root.addWidget(title)
         root.addWidget(desc)
 
         body = QHBoxLayout()
-        body.setSpacing(18)
+        body.setSpacing(14)
 
-        input_card = QFrame()
-        input_card.setObjectName('panelCard')
-        input_layout = QVBoxLayout(input_card)
-        input_layout.setContentsMargins(24, 24, 24, 24)
-
-        panel_title = QLabel('参数输入')
-        panel_title.setObjectName('panelTitle')
-
+        form_panel = QFrame()
+        form_panel.setObjectName("contentPanel")
+        form_layout = QVBoxLayout(form_panel)
+        form_layout.setContentsMargins(18, 18, 18, 18)
+        form_title = QLabel("参数输入")
+        form_title.setObjectName("sectionTitle")
         form = QGridLayout()
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(12)
+
         self.demand = QLineEdit()
         self.order_cost = QLineEdit()
         self.hold_cost = QLineEdit()
-        self.demand.setPlaceholderText('例如：10000')
-        self.order_cost.setPlaceholderText('例如：200')
-        self.hold_cost.setPlaceholderText('例如：5')
+        self.demand.setPlaceholderText("例如 10000")
+        self.order_cost.setPlaceholderText("例如 200")
+        self.hold_cost.setPlaceholderText("例如 5")
 
-        form.addWidget(QLabel('年需求量 D'), 0, 0)
+        form.addWidget(QLabel("年需求量 D"), 0, 0)
         form.addWidget(self.demand, 0, 1)
-        form.addWidget(QLabel('每次订货成本 S'), 1, 0)
+        form.addWidget(QLabel("订货成本 S"), 1, 0)
         form.addWidget(self.order_cost, 1, 1)
-        form.addWidget(QLabel('单位持有成本 H'), 2, 0)
+        form.addWidget(QLabel("持有成本 H"), 2, 0)
         form.addWidget(self.hold_cost, 2, 1)
 
-        button = QPushButton('开始计算')
+        button = QPushButton("计算 EOQ")
         button.clicked.connect(self.calculate)
-        input_layout.addWidget(panel_title)
-        input_layout.addLayout(form)
-        input_layout.addWidget(button)
-        input_layout.addStretch()
+        form_layout.addWidget(form_title)
+        form_layout.addLayout(form)
+        form_layout.addWidget(button)
+        form_layout.addStretch()
 
-        result_card = QFrame()
-        result_card.setObjectName('panelCard')
-        result_layout = QVBoxLayout(result_card)
-        result_layout.setContentsMargins(24, 24, 24, 24)
-
-        result_title = QLabel('计算结果')
-        result_title.setObjectName('panelTitle')
+        result_panel = QFrame()
+        result_panel.setObjectName("contentPanel")
+        result_layout = QVBoxLayout(result_panel)
+        result_layout.setContentsMargins(18, 18, 18, 18)
+        result_title = QLabel("分析结果")
+        result_title.setObjectName("sectionTitle")
         result_layout.addWidget(result_title)
 
-        self.results = {}
-        metrics = [
-            ('EOQ', '经济订货批量'),
-            ('平均库存', '平均库存'),
-            ('订货次数', '年订货次数'),
-            ('订货周期', '平均订货周期'),
-            ('年订货成本', '年订货成本'),
-            ('年库存持有成本', '年库存持有成本'),
-            ('总成本', '年度相关总成本'),
+        metrics = QGridLayout()
+        metrics.setHorizontalSpacing(12)
+        metrics.setVerticalSpacing(12)
+        self.cards = {}
+        defs = [
+            ("EOQ", "经济订货批量", "#28C7FA"),
+            ("平均库存", "平均库存", "#6C7BFF"),
+            ("订货次数", "年订货次数", "#A970FF"),
+            ("订货周期", "平均订货周期", "#FFB86B"),
+            ("年订货成本", "年订货成本", "#64D8CB"),
+            ("年库存持有成本", "年库存持有成本", "#FF6B8A"),
         ]
-
-        for key, label_text in metrics:
-            row = QHBoxLayout()
-            row.addWidget(QLabel(label_text))
-            value = QLabel('--')
-            value.setObjectName('metricValue')
-            row.addStretch()
-            row.addWidget(value)
-            result_layout.addLayout(row)
-            self.results[key] = value
-
+        for i, (key, text, color) in enumerate(defs):
+            card = MetricCard(text, "--", color)
+            self.cards[key] = card
+            metrics.addWidget(card, i // 2, i % 2)
+        result_layout.addLayout(metrics)
+        total_card = MetricCard("年度相关总成本", "--", "#FFFFFF", "订货成本 + 库存持有成本")
+        self.cards["总成本"] = total_card
+        result_layout.addWidget(total_card)
         result_layout.addStretch()
-        body.addWidget(input_card, 1)
-        body.addWidget(result_card, 1)
+
+        body.addWidget(form_panel, 1)
+        body.addWidget(result_panel, 2)
         root.addLayout(body, 1)
 
     def calculate(self) -> None:
         try:
             result = EOQCalculator(
-                demand=float(self.demand.text()),
-                order_cost=float(self.order_cost.text()),
-                hold_cost=float(self.hold_cost.text()),
+                float(self.demand.text()),
+                float(self.order_cost.text()),
+                float(self.hold_cost.text()),
             ).report()
-            for key, label in self.results.items():
-                label.setText(str(result[key]))
+            for key, card in self.cards.items():
+                card.set_value(str(result[key]))
+            # The page is intentionally decoupled from DataStore for compatibility.
+            self.last_result = result
+            if self.store is not None:
+                self.store.set_analysis("eoq", result)
         except Exception as exc:
-            QMessageBox.warning(self, '计算失败', str(exc))
+            QMessageBox.warning(self, "计算失败", str(exc))

@@ -9,11 +9,11 @@ class EOQCalculator:
 
     def validate(self) -> None:
         if self.demand <= 0:
-            raise ValueError('年需求量必须大于 0。')
+            raise ValueError("年需求量必须大于 0。")
         if self.order_cost <= 0:
-            raise ValueError('每次订货成本必须大于 0。')
+            raise ValueError("每次订货成本必须大于 0。")
         if self.hold_cost <= 0:
-            raise ValueError('单位持有成本必须大于 0。')
+            raise ValueError("单位持有成本必须大于 0。")
 
     def eoq(self) -> float:
         self.validate()
@@ -39,11 +39,11 @@ class EOQCalculator:
 
     def report(self) -> dict[str, float]:
         return {
-            'EOQ': round(self.eoq(), 2),
-            '平均库存': round(self.average_inventory(), 2),
-            '订货次数': round(self.order_times(), 2),
-            '订货周期': round(self.order_cycle(), 2),
-            '年订货成本': round(self.ordering_cost(), 2),
-            '年库存持有成本': round(self.holding_cost(), 2),
-            '总成本': round(self.total_cost(), 2),
+            "EOQ": round(self.eoq(), 2),
+            "平均库存": round(self.average_inventory(), 2),
+            "订货次数": round(self.order_times(), 2),
+            "订货周期": round(self.order_cycle(), 2),
+            "年订货成本": round(self.ordering_cost(), 2),
+            "年库存持有成本": round(self.holding_cost(), 2),
+            "总成本": round(self.total_cost(), 2),
         }

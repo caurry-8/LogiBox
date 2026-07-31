@@ -1,5 +1,6 @@
 PySide6
 pandas
 openpyxl
+xlrd
 matplotlib
 python-docx
