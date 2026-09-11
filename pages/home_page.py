@@ -1,6 +1,7 @@
 from typing import Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame,QGridLayout,QHBoxLayout,QLabel,QVBoxLayout,QWidget
+from core.config import APP_CONFIG
 from widgets.metric_card import MetricCard
 
 class FunctionCard(QFrame):
@@ -23,7 +24,7 @@ class HomePage(QWidget):
         layout=QVBoxLayout(self); layout.setContentsMargins(34,28,34,28); layout.setSpacing(20)
         header=QHBoxLayout(); left=QVBoxLayout(); left.setSpacing(2)
         title=QLabel("工作台"); title.setObjectName("pageTitle")
-        subtitle=QLabel("物流工程数据驾驶舱 · LogiBox V3.2"); subtitle.setObjectName("pageDescription")
+        subtitle=QLabel(f"物流工程数据驾驶舱 · LogiBox V{APP_CONFIG.version}"); subtitle.setObjectName("pageDescription")
         left.addWidget(title); left.addWidget(subtitle); header.addLayout(left); header.addStretch()
         self.data_status=QLabel("● 未加载数据"); self.data_status.setObjectName("statusBadge"); header.addWidget(self.data_status); layout.addLayout(header)
         metrics=QGridLayout(); metrics.setHorizontalSpacing(16); metrics.setVerticalSpacing(16)
@@ -39,7 +40,7 @@ class HomePage(QWidget):
             card=FunctionCard(icon,name,desc); card.clicked.connect(lambda idx=index:self.navigate(idx)); grid.addWidget(card,i//2,i%2)
         layout.addLayout(grid)
         footer=QFrame(); footer.setObjectName("dashboardNote"); footer_layout=QHBoxLayout(footer); footer_layout.setContentsMargins(16,12,16,12)
-        self.file_label=QLabel("当前数据：未加载"); self.file_label.setObjectName("dashboardNoteText"); footer_layout.addWidget(self.file_label); footer_layout.addStretch(); footer_layout.addWidget(QLabel("LogiBox Analytics Engine")); layout.addWidget(footer); layout.addStretch()
+        self.file_label=QLabel("当前数据：未加载"); self.file_label.setObjectName("dashboardNoteText"); footer_layout.addWidget(self.file_label); footer_layout.addStretch(); footer_layout.addWidget(QLabel("LogiBox 分析引擎")); layout.addWidget(footer); layout.addStretch()
     def refresh(self)->None:
         if not self.store.has_data():
             for card in [self.sku_card,self.column_card,self.missing_card,self.duplicate_card]: card.set_value("--")

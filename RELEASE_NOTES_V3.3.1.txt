@@ -1,0 +1,23 @@
+LogiBox V3.3.1 · Core Refactor
+
+本版本重点：稳定性、可维护性与公共基础设施。
+
+新增：
+- core/config.py：统一应用名称、版本号和窗口尺寸
+- core/page_registry.py：集中管理页面注册信息
+- core/theme.py：统一主题加载
+- core/logging_config.py：运行日志写入 logs/logibox.log
+- 全局异常捕获：未处理错误会提示并写入日志
+
+改进：
+- MainWindow 改为统一页面注册机制，导航与页面顺序不再重复维护
+- Navigation 改为接收页面配置，避免硬编码两份菜单
+- ChartCanvas 重写为可复用图表组件
+- 修复 ABC 柱状图 Text padding 报错
+- 修复图表代码缩进风险，空数据状态更稳定
+- 统一版本号为 V3.3.1
+
+兼容：
+- 保留 Dashboard、数据中心、EOQ、ABC、XYZ、安全库存、报告中心和关于页面
+- 保留 DataStore 分析联动
+- 保留 GitHub Design Edition 深色主题

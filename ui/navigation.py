@@ -1,63 +1,60 @@
+from collections.abc import Sequence
+
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
+
+from core.config import APP_CONFIG
 
 
 class Navigation(QWidget):
-    """LogiBox V3.2 professional sidebar navigation."""
+    """GitHub-inspired sidebar navigation with configurable page entries."""
 
     page_changed = Signal(int)
 
-    NAV_ITEMS = [
-        ("工作台", "Overview", 0),
-        ("数据中心", "Data Center", 1),
-        ("EOQ 经济订货", "Inventory", 2),
-        ("ABC 分类", "Inventory", 3),
-        ("XYZ 分析", "Inventory", 4),
-        ("安全库存", "Inventory", 5),
-        ("报告中心", "Output", 6),
-        ("关于 LogiBox", "System", 7),
-    ]
-
-    SECTION_NAMES = {
-        "Overview": "工作台",
-        "Data Center": "数据管理",
-        "Inventory": "库存分析",
-        "Output": "输出中心",
-        "System": "系统",
-    }
-
-    def __init__(self):
+    def __init__(
+        self,
+        nav_items: Sequence[tuple[str, str, int]] | None = None,
+    ) -> None:
         super().__init__()
+        self.nav_items = list(nav_items or [])
         self.setObjectName("sidebar")
-        self.setFixedWidth(248)
+        self.setFixedWidth(252)
         self.buttons: list[QPushButton] = []
         self._build_ui()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 22, 18, 18)
-        layout.setSpacing(5)
+        layout.setContentsMargins(16, 18, 16, 16)
+        layout.setSpacing(4)
+
+        brand_row = QFrame()
+        brand_row.setObjectName("brandBlock")
+        brand_layout = QVBoxLayout(brand_row)
+        brand_layout.setContentsMargins(12, 10, 12, 10)
+        brand_layout.setSpacing(2)
 
         brand = QLabel("LOGIBOX")
         brand.setObjectName("logo")
-        layout.addWidget(brand)
+        brand_layout.addWidget(brand)
 
-        subtitle = QLabel("LOGISTICS ANALYTICS PLATFORM")
+        subtitle = QLabel("物流工程分析平台")
         subtitle.setObjectName("subtitle")
-        subtitle.setWordWrap(True)
-        layout.addWidget(subtitle)
+        brand_layout.addWidget(subtitle)
 
-        version = QLabel("V3.2  ·  INTELLIGENT WORKSPACE")
+        version = QLabel(
+            f"V{APP_CONFIG.version} · {APP_CONFIG.edition}"
+        )
         version.setObjectName("versionLabel")
-        layout.addSpacing(14)
-        layout.addWidget(version)
+        brand_layout.addWidget(version)
+        layout.addWidget(brand_row)
         layout.addSpacing(12)
 
-        current_section = None
-        for text, section, index in self.NAV_ITEMS:
+        current_section: str | None = None
+        for text, section, index in self.nav_items:
             if section != current_section:
-                section_label = QLabel(self.SECTION_NAMES[section])
+                section_label = QLabel(section)
                 section_label.setObjectName("navSection")
+                layout.addSpacing(5)
                 layout.addWidget(section_label)
                 current_section = section
 
@@ -65,26 +62,32 @@ class Navigation(QWidget):
             button.setObjectName("navButton")
             button.setCheckable(True)
             button.setCursor(Qt.PointingHandCursor)
-            button.clicked.connect(lambda checked=False, i=index: self.change_page(i))
+            button.clicked.connect(
+                lambda checked=False, page_index=index: self.change_page(page_index)
+            )
             layout.addWidget(button)
             self.buttons.append(button)
 
         layout.addStretch(1)
 
-        line = QLabel("")
-        line.setObjectName("sidebarLine")
-        line.setFixedHeight(1)
-        layout.addWidget(line)
+        footer = QFrame()
+        footer.setObjectName("sidebarFooter")
+        footer_layout = QVBoxLayout(footer)
+        footer_layout.setContentsMargins(12, 10, 12, 10)
+        footer_layout.setSpacing(3)
 
-        self.status = QLabel("● SYSTEM ONLINE")
+        self.status = QLabel("系统状态：在线")
         self.status.setObjectName("status")
-        layout.addWidget(self.status)
+        footer_layout.addWidget(self.status)
 
-        self.set_active(0)
+        repository = QLabel("本地工作区")
+        repository.setObjectName("sidebarMeta")
+        footer_layout.addWidget(repository)
+        layout.addWidget(footer)
 
     def set_active(self, index: int) -> None:
-        for i, button in enumerate(self.buttons):
-            button.setChecked(i == index)
+        for button_index, button in enumerate(self.buttons):
+            button.setChecked(button_index == index)
 
     def change_page(self, index: int) -> None:
         self.set_active(index)

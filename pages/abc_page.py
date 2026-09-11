@@ -212,8 +212,16 @@ class ABCPage(QWidget):
             self.card_c.set_hint(f"金额贡献 {result.contributions['C']:.2%}")
             labels = ["A 类", "B 类", "C 类"]
             values = [result.counts["A"], result.counts["B"], result.counts["C"]]
-            self.pie_chart.draw_abc_pie(labels, values)
-            self.bar_chart.draw_abc_bar(labels, values)
+            self.pie_chart.draw_abc_pie(labels, values, title="ABC 分类 SKU 数量占比")
+
+            pareto_labels = self._pareto_labels(self.result_df)
+            pareto_values = self.result_df[value_column].tolist()
+            self.bar_chart.draw_pareto(
+                pareto_labels,
+                pareto_values,
+                title="ABC Pareto 图 · 库存价值累计占比",
+                value_label=value_column,
+            )
             self._refresh_table()
             self.analysis_status.setText("分析完成")
             self.store.set_analysis(
@@ -230,6 +238,14 @@ class ABCPage(QWidget):
         except Exception as exc:
             self.analysis_status.setText("分析失败")
             QMessageBox.critical(self, "分析失败", str(exc))
+
+    @staticmethod
+    def _pareto_labels(dataframe: pd.DataFrame) -> list[str]:
+        """优先使用 SKU/物料编码作为 Pareto 横轴；没有时才用行号。"""
+        for column in ("SKU", "物料编码", "商品编码", "物料编号", "编号"):
+            if column in dataframe.columns:
+                return [str(value) for value in dataframe[column]]
+        return [f"项目 {index + 1}" for index in range(len(dataframe))]
 
     def _refresh_table(self) -> None:
         if self.result_df is None:

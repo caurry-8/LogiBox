@@ -4,7 +4,9 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 
+from core.config import APP_CONFIG
 from utils.data_store import DataStore
+from utils.matrix_utils import CELL_ORDER, CELL_STRATEGIES
 
 
 def _add_heading(document: Document, text: str, level: int = 1) -> None:
@@ -37,7 +39,7 @@ def generate_word_report(filename: str, store: DataStore) -> str:
 
     title = document.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = title.add_run("LogiBox V3.2 物流数据分析报告")
+    run = title.add_run(f"LogiBox V{APP_CONFIG.version} 物流数据分析报告")
     run.bold = True
     run.font.size = Pt(18)
 
@@ -93,7 +95,41 @@ def generate_word_report(filename: str, store: DataStore) -> str:
     else:
         document.add_paragraph("当前尚未完成 XYZ 稳定性分析。")
 
-    _add_heading(document, "四、EOQ 计算结果")
+    _add_heading(document, "四、ABC × XYZ 交叉矩阵")
+    matrix = store.get_analysis("matrix")
+    if matrix:
+        cell_counts = matrix.get("cell_counts", {})
+        cell_values = matrix.get("cell_values", {})
+        cell_amounts = matrix.get("cell_amounts", {})
+        cell_sku_shares = matrix.get("cell_sku_shares", {})
+        value_column = matrix.get("value_column", "")
+        rows = [
+            ("关键字段", matrix.get("key_column", "")),
+            ("价值字段", value_column or "未选择，按 SKU 数量统计"),
+            ("匹配 SKU 数", str(len(matrix.get("dataframe", [])))),
+        ]
+        for cell in CELL_ORDER:
+            summary = (
+                f"{cell_counts.get(cell, 0)} 个 SKU · SKU 占比 {cell_sku_shares.get(cell, 0):.2%}"
+            )
+            if value_column:
+                summary += (
+                    f" · {value_column} {cell_amounts.get(cell, 0):,.2f}"
+                    f" · 金额占比 {cell_values.get(cell, 0):.2%}"
+                )
+            rows.append((cell, summary))
+        _add_key_value_table(document, rows)
+        document.add_paragraph("单元管理策略：")
+        for cell in CELL_ORDER:
+            strategy = CELL_STRATEGIES[cell]
+            document.add_paragraph(
+                f"{cell}（{strategy['title']}，优先级 {strategy['priority']}）：{strategy['action']}",
+                style="List Bullet",
+            )
+    else:
+        document.add_paragraph("当前尚未生成 ABC × XYZ 交叉矩阵。")
+
+    _add_heading(document, "五、EOQ 计算结果")
     eoq = store.get_analysis("eoq")
     if eoq:
         rows = [(key, value) for key, value in eoq.items()]
@@ -101,7 +137,7 @@ def generate_word_report(filename: str, store: DataStore) -> str:
     else:
         document.add_paragraph("当前尚未完成 EOQ 计算。")
 
-    _add_heading(document, "五、安全库存与再订货点")
+    _add_heading(document, "六、安全库存与再订货点")
     safety = store.get_analysis("safety")
     if safety:
         _add_key_value_table(
@@ -115,10 +151,11 @@ def generate_word_report(filename: str, store: DataStore) -> str:
     else:
         document.add_paragraph("当前尚未完成安全库存计算。")
 
-    _add_heading(document, "六、分析建议")
+    _add_heading(document, "七、分析建议")
     recommendations = [
         "优先关注 ABC 中 A 类库存的缺货风险与补货策略。",
         "对 XYZ 中 Z 类库存强化需求预测和安全库存复核。",
+        "按 ABC × XYZ 矩阵区分管理强度：AZ / AY 单元优先配置安全库存与双源供应，CX / CY / CZ 单元简化流程、降低管理成本。",
         "结合 EOQ 与安全库存结果优化订货批量和再订货点。",
         "正式决策前建议结合业务周期、供应商交期和仓储容量进行校验。",
     ]

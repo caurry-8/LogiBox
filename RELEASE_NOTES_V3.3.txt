@@ -1,0 +1,9 @@
+LogiBox V3.3 · Design Edition
+
+Visual redesign inspired by GitHub Desktop and GitHub Dark:
+- New restrained dark color system
+- Redesigned sidebar and navigation hierarchy
+- New dashboard with Overview, Quick Actions, and Analysis Status
+- Unified buttons, cards, tables, inputs, borders, and spacing
+- Removed decorative emoji-style icons from the main workspace
+- Preserved all V3.2 functional modules and shared DataStore workflow

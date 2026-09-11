@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
+from core.config import APP_CONFIG
 from utils.data_store import DataStore
 from utils.report_utils import generate_word_report
 from widgets.metric_card import MetricCard
@@ -31,11 +32,13 @@ class ReportPage(QWidget):
         self.data_card = MetricCard("数据源", "--", "#28C7FA", "当前数据文件")
         self.abc_card = MetricCard("ABC 分析", "未完成", "#6C7BFF", "价值贡献分析")
         self.xyz_card = MetricCard("XYZ 分析", "未完成", "#A970FF", "需求稳定性分析")
+        self.matrix_card = MetricCard("交叉矩阵", "未完成", "#FFB86B", "ABC × XYZ 策略矩阵")
         self.model_card = MetricCard("模型计算", "0 / 2", "#64D8CB", "EOQ + 安全库存")
         cards.addWidget(self.data_card, 0, 0)
         cards.addWidget(self.abc_card, 0, 1)
         cards.addWidget(self.xyz_card, 0, 2)
-        cards.addWidget(self.model_card, 0, 3)
+        cards.addWidget(self.matrix_card, 0, 3)
+        cards.addWidget(self.model_card, 1, 0)
         root.addLayout(cards)
 
         actions = QHBoxLayout()
@@ -62,8 +65,10 @@ class ReportPage(QWidget):
 
         abc = self.store.get_analysis("abc")
         xyz = self.store.get_analysis("xyz")
+        matrix = self.store.get_analysis("matrix")
         self.abc_card.set_value("已完成" if abc else "未完成")
         self.xyz_card.set_value("已完成" if xyz else "未完成")
+        self.matrix_card.set_value("已完成" if matrix else "未完成")
         model_count = int(self.store.has_analysis("eoq")) + int(self.store.has_analysis("safety"))
         self.model_card.set_value(f"{model_count} / 2")
 
@@ -74,7 +79,7 @@ class ReportPage(QWidget):
         filename, _ = QFileDialog.getSaveFileName(
             self,
             "生成 Word 分析报告",
-            "LogiBox_V3.2_分析报告.docx",
+            f"LogiBox_V{APP_CONFIG.version}_分析报告.docx",
             "Word 文档 (*.docx)",
         )
         if not filename:

@@ -54,6 +54,13 @@ class XYZPage(QWidget):
         header.addWidget(self.status)
         root.addLayout(header)
 
+        basis_note = QLabel(
+            "分类依据：变异系数 CV = 需求标准差 ÷ 平均需求。X 类需求稳定，Y 类存在一定波动，Z 类需求波动较大。"
+        )
+        basis_note.setObjectName("analysisNote")
+        basis_note.setWordWrap(True)
+        root.addWidget(basis_note)
+
         controls = QFrame()
         controls.setObjectName("controlBar")
         controls_layout = QGridLayout(controls)
@@ -156,9 +163,17 @@ class XYZPage(QWidget):
             self.card_x.set_value(str(result.counts["X"]))
             self.card_y.set_value(str(result.counts["Y"]))
             self.card_z.set_value(str(result.counts["Z"]))
-            self.card_x.set_hint("需求相对稳定")
-            self.card_y.set_hint("需求存在波动")
-            self.card_z.set_hint("需求波动较大")
+            total = sum(result.counts.values())
+            self.card_x.set_hint(
+                f"需求稳定 · 占比 {result.counts['X'] / total:.1%}" if total else "需求稳定"
+            )
+            self.card_y.set_hint(
+                f"需求存在一定波动 · 占比 {result.counts['Y'] / total:.1%}"
+                if total else "需求存在一定波动"
+            )
+            self.card_z.set_hint(
+                f"需求波动较大 · 占比 {result.counts['Z'] / total:.1%}" if total else "需求波动较大"
+            )
             self.status.setText("分析完成")
             self._refresh_table()
             self.store.set_analysis(
