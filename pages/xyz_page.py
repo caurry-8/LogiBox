@@ -182,6 +182,7 @@ class XYZPage(QWidget):
                     "dataframe": self.result_df,
                     "counts": result.counts,
                     "mean_cv": result.mean_cv,
+                    "status_counts": result.status_counts,
                     "period_columns": periods,
                     "x_rate": self.x_spin.value(),
                     "y_rate": self.y_spin.value(),

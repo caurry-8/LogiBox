@@ -4,3 +4,6 @@ openpyxl
 xlrd
 matplotlib
 python-docx
+
+# 测试
+pytest
