@@ -441,3 +441,42 @@ QTabBar::tab:selected {
     background: #161b22;
     color: #f0f6fc;
 }
+
+#qualityPanel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+}
+
+#qualityStatus {
+    color: #8b949e;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+#qualityStatus[severity="ok"] {
+    color: #3fb950;
+    background: #0f2419;
+    border: 1px solid #238636;
+}
+
+#qualityStatus[severity="warning"] {
+    color: #d29922;
+    background: #2b2308;
+    border: 1px solid #9e6a03;
+}
+
+#qualityStatus[severity="blocker"] {
+    color: #f85149;
+    background: #2d1214;
+    border: 1px solid #da3633;
+}
+
+#qualityIssues {
+    color: #8b949e;
+    font-size: 11px;
+}

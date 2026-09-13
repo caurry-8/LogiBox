@@ -248,3 +248,101 @@ def test_recommend_key_column_prefers_sku():
 def test_recommend_key_column_falls_back_to_first_column():
     assert ABCXYZMatrixAnalyzer.recommend_key_column(["甲", "乙"]) == "甲"
     assert ABCXYZMatrixAnalyzer.recommend_key_column([]) == ""
+
+
+# --------------------------------------------------------------------------- #
+# 覆盖透明度（V3.5.0-A-03）
+# --------------------------------------------------------------------------- #
+
+DIRTY_PERIODS = ["1月", "2月", "3月"]
+
+
+def _dirty_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """4 行数据：A 有效、B 缺失、C 非法、D 有效。
+
+    ABC：A=2 / B=1 / C=1；XYZ：valid 2（A、D）、missing 1（B）、invalid 1（C）。
+    交叉后只有 A→AX、D→CX 能进入矩阵。
+    """
+    dataframe = pd.DataFrame(
+        {
+            "SKU": ["A", "B", "C", "D"],
+            "年消耗金额": [400.0, 300.0, 200.0, 100.0],
+            "1月": [10, None, float("inf"), 10],
+            "2月": [10, None, 20, 10],
+            "3月": [10, None, 30, 10],
+        }
+    )
+    abc = ABCAnalyzer(dataframe, "年消耗金额").analyze().dataframe
+    xyz = XYZAnalyzer(dataframe, DIRTY_PERIODS).analyze().dataframe
+    return abc, xyz
+
+
+def test_clean_matrix_data_reports_full_coverage(matrix_result, matrix_source_dataframe):
+    assert matrix_result.input_sku_count == len(matrix_source_dataframe)
+    assert matrix_result.excluded_sku_count == 0
+    assert matrix_result.has_exclusions is False
+    assert matrix_result.coverage_rate == pytest.approx(1.0)
+    assert matrix_result.analyzed_sku_count == len(matrix_result.dataframe)
+
+
+def test_analyzed_count_equals_dataframe_rows(matrix_result):
+    assert matrix_result.analyzed_sku_count == len(matrix_result.dataframe)
+
+
+def test_matrix_reports_excluded_skus_and_reasons():
+    abc, xyz = _dirty_frames()
+    result = ABCXYZMatrixAnalyzer(
+        abc, xyz, key_column="SKU", value_column="年消耗金额"
+    ).analyze()
+
+    assert result.input_sku_count == 4
+    assert result.analyzed_sku_count == 2
+    assert result.excluded_sku_count == 2
+    assert result.has_exclusions is True
+    assert result.coverage_rate == pytest.approx(0.5)
+    assert result.excluded_by_quality == {"missing": 1, "invalid": 1}
+    assert set(result.dataframe["SKU"]) == {"A", "D"}
+
+
+def test_cell_sku_shares_denominator_is_analyzed_set_not_input():
+    """占比分母必须是「已参与分析的 SKU」，不能因为存在排除项而被重新基准化。"""
+    abc, xyz = _dirty_frames()
+    result = ABCXYZMatrixAnalyzer(
+        abc, xyz, key_column="SKU", value_column="年消耗金额"
+    ).analyze()
+
+    assert sum(result.cell_sku_shares.values()) == pytest.approx(1.0)
+    # 已参与 2 个 SKU，各占 1/2；若误用输入 4 个作分母会是 1/4
+    assert result.cell_sku_shares["AX"] == pytest.approx(0.5)
+    assert result.cell_sku_shares["CX"] == pytest.approx(0.5)
+    assert result.cell_counts["AX"] == 1
+    assert result.cell_counts["CX"] == 1
+
+
+def test_excluded_by_quality_empty_without_quality_column():
+    """XYZ 结果没有数据质量列时，不伪造原因，但排除数量仍要如实报告。"""
+    abc = pd.DataFrame(
+        {
+            "SKU": ["A", "B"],
+            "年消耗金额": [100.0, 50.0],
+            "ABC分类": ["A", "B"],
+        }
+    )
+    xyz = pd.DataFrame({"SKU": ["A", "B"], "XYZ分类": ["X", "未分类"]})
+
+    result = ABCXYZMatrixAnalyzer(
+        abc, xyz, key_column="SKU", value_column="年消耗金额"
+    ).analyze()
+
+    assert result.input_sku_count == 2
+    assert result.analyzed_sku_count == 1
+    assert result.excluded_sku_count == 1
+    assert result.excluded_by_quality == {}
+
+
+def test_exclusions_do_not_change_clean_data_results(matrix_result):
+    """新增的透明度字段不得影响原有单元数量与金额占比。"""
+    assert matrix_result.cell_counts == EXPECTED_CELL_COUNTS
+    for cell, expected_share in EXPECTED_CELL_VALUES.items():
+        assert matrix_result.cell_values[cell] == pytest.approx(expected_share, rel=1e-9)
+    assert matrix_result.excluded_sku_count == 0

@@ -1,7 +1,9 @@
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -14,6 +16,15 @@ from PySide6.QtWidgets import (
 
 from utils.data_store import DataStore
 from utils.excel_utils import export_dataframe
+from utils.quality_text import (
+    SEVERITY_COLORS,
+    describe,
+    format_cell_value,
+    impact_text,
+    severity_label,
+    status_label,
+)
+from utils.quality_utils import assess_data_quality
 
 
 class ImportPage(QWidget):
@@ -62,12 +73,46 @@ class ImportPage(QWidget):
         toolbar.addWidget(self.stats_label)
         layout.addLayout(toolbar)
 
+        layout.addWidget(self._build_quality_panel())
+
         self.table = QTableWidget()
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.DoubleClicked)
         layout.addWidget(self.table, 1)
+
+    def _build_quality_panel(self) -> QFrame:
+        """轻量数据质量概览：状态 + 关键数字 + 问题列表（不做成完整 Dashboard）。"""
+        panel = QFrame()
+        panel.setObjectName("qualityPanel")
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(14, 12, 14, 12)
+        panel_layout.setSpacing(6)
+
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        title = QLabel("数据质量")
+        title.setObjectName("sectionTitle")
+        self.quality_status = QLabel("未加载数据")
+        self.quality_status.setObjectName("qualityStatus")
+        header.addWidget(title)
+        header.addWidget(self.quality_status)
+        header.addStretch()
+        panel_layout.addLayout(header)
+
+        self.quality_metrics = QLabel("")
+        self.quality_metrics.setObjectName("mutedLabel")
+        self.quality_metrics.setWordWrap(True)
+        panel_layout.addWidget(self.quality_metrics)
+
+        self.quality_issues = QLabel("")
+        self.quality_issues.setObjectName("qualityIssues")
+        self.quality_issues.setWordWrap(True)
+        self.quality_issues.setTextFormat(Qt.RichText)
+        panel_layout.addWidget(self.quality_issues)
+
+        return panel
 
     def open_file(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
@@ -112,8 +157,63 @@ class ImportPage(QWidget):
         except Exception as exc:
             QMessageBox.critical(self, "导出失败", str(exc))
 
+    def refresh_quality(self) -> None:
+        """刷新数据质量概览。字段识别遵循「不猜测」：只有高置信命中主键列名才给出 SKU 级指标。"""
+        df = self.store.dataframe()
+        result = assess_data_quality(df)
+
+        self.quality_status.setText(status_label(result.status))
+        self.quality_status.setProperty("severity", result.status)
+        self.quality_status.style().unpolish(self.quality_status)
+        self.quality_status.style().polish(self.quality_status)
+
+        if df is None:
+            self.quality_metrics.setText("")
+            self.quality_issues.setText("")
+            return
+
+        parts = [f"总记录 {result.total_rows}", f"字段 {result.total_columns}"]
+        if result.has_key_metrics:
+            parts.extend(
+                [
+                    f"主键 {result.key_column}",
+                    f"有效 SKU {result.valid_key_count}",
+                    f"空值 SKU {result.empty_key_count}",
+                    f"重复 SKU {result.duplicate_key_count}",
+                ]
+            )
+        parts.extend(
+            [
+                f"缺失单元格 {result.missing_cell_count}",
+                f"阻断 {result.blocker_count} ｜ 警告 {result.warning_count}",
+            ]
+        )
+        self.quality_metrics.setText(" ｜ ".join(parts))
+
+        if not result.issues:
+            self.quality_issues.setText("未发现数据质量问题。")
+            return
+
+        lines = []
+        for issue in result.issues:
+            title, description, action = describe(issue)
+            color = SEVERITY_COLORS.get(issue.severity, "#8b949e")
+            detail = description
+            if issue.affected_count:
+                detail += f"（受影响 {issue.affected_count} 项）"
+            impact = impact_text(issue)
+            if impact:
+                detail += f"　{impact}"
+            lines.append(
+                f'<span style="color:{color};">{severity_label(issue.severity)}</span>'
+                f"　<b>{title}</b>　{detail}"
+                f'<br/><span style="color:#6e7681;">建议：{action}</span>'
+            )
+        self.quality_issues.setText("<br/>".join(lines))
+
     def refresh_table(self) -> None:
         df = self.store.dataframe()
+        self.refresh_quality()
         self.table.setSortingEnabled(False)
         self.table.clear()
 
@@ -131,7 +231,9 @@ class ImportPage(QWidget):
 
         for r in range(len(df)):
             for c in range(len(df.columns)):
-                self.table.setItem(r, c, QTableWidgetItem(str(df.iat[r, c])))
+                self.table.setItem(
+                    r, c, QTableWidgetItem(format_cell_value(df.iat[r, c]))
+                )
 
         self.table.resizeColumnsToContents()
         self.table.setSortingEnabled(True)

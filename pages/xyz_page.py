@@ -20,7 +20,8 @@ from PySide6.QtWidgets import (
 
 from utils.data_store import DataStore
 from utils.excel_utils import export_dataframe
-from utils.xyz_utils import XYZAnalyzer
+from utils.quality_text import format_cell_value, xyz_status_label
+from utils.xyz_utils import QUALITY_COLUMN, STATUS_INVALID, STATUS_MISSING, XYZAnalyzer
 from widgets.metric_card import MetricCard
 
 
@@ -107,6 +108,11 @@ class XYZPage(QWidget):
         metrics.addWidget(self.card_z)
         root.addLayout(metrics)
 
+        self.coverage_note = QLabel("完成分析后显示数据覆盖情况。")
+        self.coverage_note.setObjectName("analysisNote")
+        self.coverage_note.setWordWrap(True)
+        root.addWidget(self.coverage_note)
+
         table_panel = QFrame()
         table_panel.setObjectName("tablePanel")
         table_layout = QVBoxLayout(table_panel)
@@ -130,6 +136,8 @@ class XYZPage(QWidget):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Unchecked)
             self.period_list.addItem(item)
+        # 数据源变化后旧结果失效，覆盖说明一并复位
+        self.coverage_note.setText("完成分析后显示数据覆盖情况。")
 
     def _selected_periods(self) -> list[str]:
         columns = []
@@ -163,17 +171,16 @@ class XYZPage(QWidget):
             self.card_x.set_value(str(result.counts["X"]))
             self.card_y.set_value(str(result.counts["Y"]))
             self.card_z.set_value(str(result.counts["Z"]))
-            total = sum(result.counts.values())
-            self.card_x.set_hint(
-                f"需求稳定 · 占比 {result.counts['X'] / total:.1%}" if total else "需求稳定"
-            )
+            # 占比基数是「已完成分类的 SKU」，必须在文案中明确，避免被误读为全部 SKU 的比例。
+            classified = result.classified_count
+            self.card_x.set_hint(self._share_hint("需求稳定", result.counts["X"], classified))
             self.card_y.set_hint(
-                f"需求存在一定波动 · 占比 {result.counts['Y'] / total:.1%}"
-                if total else "需求存在一定波动"
+                self._share_hint("需求存在一定波动", result.counts["Y"], classified)
             )
             self.card_z.set_hint(
-                f"需求波动较大 · 占比 {result.counts['Z'] / total:.1%}" if total else "需求波动较大"
+                self._share_hint("需求波动较大", result.counts["Z"], classified)
             )
+            self.coverage_note.setText(self._coverage_text(result))
             self.status.setText("分析完成")
             self._refresh_table()
             self.store.set_analysis(
@@ -183,6 +190,7 @@ class XYZPage(QWidget):
                     "counts": result.counts,
                     "mean_cv": result.mean_cv,
                     "status_counts": result.status_counts,
+                    "total_count": result.total_count,
                     "period_columns": periods,
                     "x_rate": self.x_spin.value(),
                     "y_rate": self.y_spin.value(),
@@ -191,6 +199,36 @@ class XYZPage(QWidget):
         except Exception as exc:
             self.status.setText("分析失败")
             QMessageBox.critical(self, "分析失败", str(exc))
+
+    @staticmethod
+    def _share_hint(label: str, count: int, classified: int) -> str:
+        """分类占比提示，明确写出分母是「已分类 SKU」。"""
+        if classified <= 0:
+            return f"{label} · 暂无有效分类"
+        return f"{label} · 占已分类 SKU 的 {count / classified:.1%}"
+
+    @staticmethod
+    def _coverage_text(result) -> str:
+        """数据覆盖说明：总量、有效分类、未分类原因、平均 CV 口径。"""
+        classified = result.classified_count
+        total = result.total_count
+        lines = [
+            f"数据覆盖：有效分类 {classified} / 总 SKU {total}"
+            f"（覆盖率 {result.coverage_rate:.1%}）"
+        ]
+        if result.unclassified_count:
+            missing = result.status_counts.get(STATUS_MISSING, 0)
+            invalid = result.status_counts.get(STATUS_INVALID, 0)
+            lines.append(
+                f"未参与分类 {result.unclassified_count}"
+                f"（缺失数据 {missing} / 非法数据 {invalid}）"
+            )
+        if result.mean_cv is None:
+            lines.append("平均 CV：暂无有效数据")
+        else:
+            lines.append(f"平均 CV：{result.mean_cv:.4f}（基于 {classified} 个有效 SKU）")
+        lines.append("X / Y / Z 分布基于已完成有效分类的 SKU。")
+        return "\n".join(lines)
 
     def _refresh_table(self) -> None:
         if self.result_df is None:
@@ -204,7 +242,14 @@ class XYZPage(QWidget):
         for r in range(len(df)):
             for c in range(len(df.columns)):
                 value = df.iat[r, c]
-                text = f"{float(value):.4f}" if df.columns[c] == "变异系数CV" else str(value)
+                column = df.columns[c]
+                if column == QUALITY_COLUMN and isinstance(value, str):
+                    # 内部状态语义（valid / missing / invalid）不直接暴露给用户
+                    text = xyz_status_label(value)
+                else:
+                    # CV 列固定 4 位小数；缺失与非法值统一为占位符
+                    digits = 4 if column == "变异系数CV" else None
+                    text = format_cell_value(value, digits)
                 self.table.setItem(r, c, QTableWidgetItem(text))
         self.table.resizeColumnsToContents()
         self.table.setSortingEnabled(True)

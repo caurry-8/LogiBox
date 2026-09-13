@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 from docx import Document
@@ -7,6 +8,26 @@ from docx.shared import Pt
 from core.config import APP_CONFIG
 from utils.data_store import DataStore
 from utils.matrix_utils import CELL_ORDER, CELL_STRATEGIES
+from utils.quality_text import (
+    coverage_text,
+    excluded_reason_text,
+    format_issue_line,
+    status_label,
+)
+from utils.quality_utils import assess_data_quality
+
+
+def _format_mean_cv(value) -> str:
+    """平均 CV 的展示：没有可计算 CV 的有效 SKU 时明确写「暂无有效数据」。"""
+    if value is None:
+        return "暂无有效数据"
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "暂无有效数据"
+    if math.isnan(number):
+        return "暂无有效数据"
+    return f"{number:.4f}"
 
 
 def _add_heading(document: Document, text: str, level: int = 1) -> None:
@@ -48,15 +69,34 @@ def generate_word_report(filename: str, store: DataStore) -> str:
     subtitle.add_run(f"数据源：{store.filename_only()}")
 
     _add_heading(document, "一、数据概况")
-    _add_key_value_table(
-        document,
-        [
-            ("数据行数", str(store.rows())),
-            ("字段数量", str(store.cols())),
-            ("缺失单元格", str(store.missing_cells())),
-            ("重复行", str(store.duplicate_rows())),
-        ],
+    quality = assess_data_quality(store.dataframe())
+    overview_rows = [
+        ("数据行数", str(store.rows())),
+        ("字段数量", str(store.cols())),
+        ("缺失单元格", str(store.missing_cells())),
+        ("重复行", str(store.duplicate_rows())),
+        ("数据质量状态", status_label(quality.status)),
+    ]
+    if quality.has_key_metrics:
+        overview_rows.extend(
+            [
+                (f"有效 SKU（{quality.key_column}）", str(quality.valid_key_count)),
+                ("空值 SKU", str(quality.empty_key_count)),
+                ("重复 SKU", str(quality.duplicate_key_count)),
+            ]
+        )
+    overview_rows.append(
+        (
+            "数据质量问题",
+            f"阻断 {quality.blocker_count} / 警告 {quality.warning_count} / 提示 {quality.info_count}",
+        )
     )
+    _add_key_value_table(document, overview_rows)
+
+    if quality.issues:
+        document.add_paragraph("数据质量问题明细：")
+        for issue in quality.issues:
+            document.add_paragraph(format_issue_line(issue), style="List Bullet")
 
     _add_heading(document, "二、ABC 分类分析")
     abc = store.get_analysis("abc")
@@ -82,16 +122,27 @@ def generate_word_report(filename: str, store: DataStore) -> str:
     xyz = store.get_analysis("xyz")
     if xyz:
         counts = xyz.get("counts", {})
-        _add_key_value_table(
-            document,
-            [
-                ("历史周期字段", ", ".join(xyz.get("period_columns", []))),
-                ("X 类 SKU", counts.get("X", 0)),
-                ("Y 类 SKU", counts.get("Y", 0)),
-                ("Z 类 SKU", counts.get("Z", 0)),
-                ("平均 CV", f"{xyz.get('mean_cv', 0):.4f}"),
-            ],
-        )
+        classified = sum(int(counts.get(key, 0)) for key in ("X", "Y", "Z"))
+        rows = [
+            ("历史周期字段", ", ".join(xyz.get("period_columns", []))),
+            ("X 类 SKU", counts.get("X", 0)),
+            ("Y 类 SKU", counts.get("Y", 0)),
+            ("Z 类 SKU", counts.get("Z", 0)),
+            ("平均 CV", _format_mean_cv(xyz.get("mean_cv"))),
+        ]
+        total_count = xyz.get("total_count")
+        if total_count:
+            total_count = int(total_count)
+            rows.extend(
+                [
+                    ("总 SKU", str(total_count)),
+                    ("有效分类 SKU", str(classified)),
+                    ("未参与分类 SKU", str(max(0, total_count - classified))),
+                    ("分类覆盖率", coverage_text(classified, total_count)),
+                ]
+            )
+        _add_key_value_table(document, rows)
+        document.add_paragraph("X / Y / Z 分布基于已完成有效分类的 SKU。")
     else:
         document.add_paragraph("当前尚未完成 XYZ 稳定性分析。")
 
@@ -108,6 +159,21 @@ def generate_word_report(filename: str, store: DataStore) -> str:
             ("价值字段", value_column or "未选择，按 SKU 数量统计"),
             ("匹配 SKU 数", str(len(matrix.get("dataframe", [])))),
         ]
+        input_sku_count = matrix.get("input_sku_count")
+        if input_sku_count is not None:
+            input_sku_count = int(input_sku_count)
+            analyzed = len(matrix.get("dataframe", []))
+            excluded = int(matrix.get("excluded_sku_count") or 0)
+            rows.extend(
+                [
+                    ("矩阵分析覆盖", coverage_text(analyzed, input_sku_count)),
+                    ("未参与分析 SKU", str(excluded)),
+                ]
+            )
+            reason = excluded_reason_text(matrix.get("excluded_by_quality") or {})
+            if reason:
+                rows.append(("未参与原因", reason))
+            rows.append(("占比口径", "基于已参与分析的 SKU"))
         for cell in CELL_ORDER:
             summary = (
                 f"{cell_counts.get(cell, 0)} 个 SKU · SKU 占比 {cell_sku_shares.get(cell, 0):.2%}"

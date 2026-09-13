@@ -27,6 +27,7 @@ from utils.xyz_utils import (
     STATUS_VALID,
     UNCLASSIFIED,
     XYZAnalyzer,
+    XYZResult,
 )
 
 # 示例数据按 CV 分类结果：X=4（A001 / A002 / A004 / A007），Y=6，Z=0
@@ -551,3 +552,100 @@ def test_negative_demand_is_still_rejected_when_other_rows_are_missing():
     )
     with pytest.raises(ValueError, match="不能包含负数"):
         XYZAnalyzer(dataframe, ["1月", "2月"]).analyze()
+
+
+# --------------------------------------------------------------------------- #
+# 七、覆盖率与 mean_cv 口径（V3.5.0-A-03）
+# --------------------------------------------------------------------------- #
+
+
+def test_total_count_equals_dataframe_rows(sample_dataframe, sample_period_columns):
+    result = XYZAnalyzer(sample_dataframe, sample_period_columns).analyze()
+    assert result.total_count == len(result.dataframe)
+    assert result.total_count == len(sample_dataframe)
+
+
+def test_all_valid_data_has_full_coverage(sample_dataframe, sample_period_columns):
+    result = XYZAnalyzer(sample_dataframe, sample_period_columns).analyze()
+
+    assert result.classified_count == 10
+    assert result.unclassified_count == 0
+    assert result.coverage_rate == pytest.approx(1.0)
+    assert result.has_valid_data is True
+
+
+def test_partial_missing_reduces_coverage():
+    dataframe = pd.DataFrame(
+        {"SKU": ["OK", "MISSING"], "1月": [10, None], "2月": [20, None]}
+    )
+    result = XYZAnalyzer(dataframe, ["1月", "2月"]).analyze()
+
+    assert result.total_count == 2
+    assert result.classified_count == 1
+    assert result.unclassified_count == 1
+    assert result.coverage_rate == pytest.approx(0.5)
+
+
+def test_unclassified_count_covers_missing_and_invalid():
+    dataframe = pd.DataFrame(
+        {
+            "SKU": ["OK", "MISSING", "INVALID"],
+            "1月": [10, None, float("inf")],
+            "2月": [20, None, 30],
+        }
+    )
+    result = XYZAnalyzer(dataframe, ["1月", "2月"]).analyze()
+
+    assert result.total_count == 3
+    assert result.classified_count == 1
+    assert result.unclassified_count == 2
+    assert result.coverage_rate == pytest.approx(1 / 3)
+
+
+def test_no_valid_data_yields_none_mean_cv_not_zero():
+    """全部 SKU 非法时 mean_cv 必须是 None，禁止用 0 冒充「波动很小」。"""
+    dataframe = pd.DataFrame(
+        {
+            "SKU": ["I1", "I2"],
+            "1月": [float("inf"), float("inf")],
+            "2月": [10.0, 20.0],
+        }
+    )
+    result = XYZAnalyzer(dataframe, ["1月", "2月"]).analyze()
+
+    assert result.mean_cv is None
+    assert result.mean_cv != 0.0
+    assert result.has_valid_data is False
+    assert result.classified_count == 0
+    assert result.unclassified_count == 2
+    assert result.coverage_rate == pytest.approx(0.0)
+
+
+def test_valid_data_keeps_float_mean_cv(sample_dataframe, sample_period_columns):
+    result = XYZAnalyzer(sample_dataframe, sample_period_columns).analyze()
+
+    assert isinstance(result.mean_cv, float)
+    assert result.mean_cv == pytest.approx(SAMPLE_MEAN_CV, abs=0.0005)
+
+
+def test_partial_missing_keeps_mean_cv_from_valid_rows_only():
+    dataframe = pd.DataFrame(
+        {"SKU": ["OK", "MISSING"], "1月": [100, None], "2月": [200, None]}
+    )
+    result = XYZAnalyzer(dataframe, ["1月", "2月"]).analyze()
+
+    # OK：[100, 200] → 均值 150、总体标准差 50、CV = 1/3
+    assert result.mean_cv == pytest.approx(1 / 3, rel=1e-12)
+
+
+def test_coverage_rate_property_handles_zero_total():
+    result = XYZResult(
+        dataframe=pd.DataFrame(),
+        counts={"X": 0, "Y": 0, "Z": 0},
+        mean_cv=None,
+        total_count=0,
+    )
+
+    assert result.coverage_rate == pytest.approx(0.0)
+    assert result.unclassified_count == 0
+    assert result.has_valid_data is False

@@ -28,6 +28,7 @@ from utils.matrix_utils import (
     MatrixResult,
     XYZ_ORDER,
 )
+from utils.quality_text import excluded_reason_text
 from widgets.metric_card import MetricCard
 
 CELL_BAR_COLORS = [
@@ -122,6 +123,11 @@ class MatrixPage(QWidget):
         for card in (self.card_matched, self.card_high, self.card_risk, self.card_coverage):
             metrics.addWidget(card)
         root.addLayout(metrics)
+
+        self.coverage_label = QLabel("生成矩阵后显示分析覆盖情况。")
+        self.coverage_label.setObjectName("analysisNote")
+        self.coverage_label.setWordWrap(True)
+        root.addWidget(self.coverage_label)
 
         charts = QFrame()
         charts.setObjectName("chartPanel")
@@ -237,6 +243,7 @@ class MatrixPage(QWidget):
         self.strategy_table.setRowCount(0)
         self.detail_table.setRowCount(0)
         self.detail_table.setColumnCount(0)
+        self.coverage_label.setText("生成矩阵后显示分析覆盖情况。")
 
     # ---------------------------------------------------------------- analysis
 
@@ -278,6 +285,7 @@ class MatrixPage(QWidget):
         self._draw_charts(result)
         self._fill_strategy_table(result)
         self._fill_detail_table(result)
+        self.coverage_label.setText(self._coverage_text(result))
         self.selection_label.setText(
             "矩阵已生成：点击热力图中的 AX、AY、AZ 等单元格，可筛选并查看对应 SKU 明细。"
         )
@@ -293,6 +301,9 @@ class MatrixPage(QWidget):
                 "key_column": result.key_column,
                 "value_column": result.value_column,
                 "total_value": result.total_value,
+                "input_sku_count": result.input_sku_count,
+                "excluded_sku_count": result.excluded_sku_count,
+                "excluded_by_quality": result.excluded_by_quality,
             },
         )
 
@@ -305,6 +316,25 @@ class MatrixPage(QWidget):
         self.card_high.set_value(str(high))
         self.card_risk.set_value(str(risk))
         self.card_coverage.set_value(f"{coverage} / 9")
+
+    @staticmethod
+    def _coverage_text(result: MatrixResult) -> str:
+        """矩阵覆盖说明：参与数量、未参与数量与原因、占比口径。"""
+        analyzed = result.analyzed_sku_count
+        total = result.input_sku_count
+        lines = [
+            f"矩阵分析覆盖：有效 SKU {analyzed} / 总 SKU {total}"
+            f"（覆盖率 {result.coverage_rate:.1%}）"
+        ]
+        if result.has_exclusions:
+            reason = excluded_reason_text(result.excluded_by_quality)
+            detail = f"未参与矩阵分析 {result.excluded_sku_count} 个 SKU"
+            detail += f"（{reason}）" if reason else "（原因：数据质量问题）"
+            lines.append(detail)
+        else:
+            lines.append("全部 SKU 均已参与矩阵分析。")
+        lines.append("矩阵占比基于已参与分析的 SKU。")
+        return "\n".join(lines)
 
     def _draw_charts(self, result: MatrixResult) -> None:
         matrix = [

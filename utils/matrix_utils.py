@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from utils.xyz_utils import QUALITY_COLUMN
+
 ABC_ORDER = ["A", "B", "C"]
 XYZ_ORDER = ["X", "Y", "Z"]
 CELL_ORDER = [f"{a}{x}" for a in ABC_ORDER for x in XYZ_ORDER]
@@ -79,7 +81,13 @@ CELL_STRATEGIES: dict[str, dict[str, str]] = {
 
 @dataclass
 class MatrixResult:
-    """ABC × XYZ 合并后的明细、分布与静态策略。"""
+    """ABC × XYZ 合并后的明细、分布与静态策略。
+
+    覆盖透明度：input_sku_count 是进入合并的 SKU 总数，excluded_sku_count 是因数据质量
+    问题未参与矩阵分析的 SKU 数（例如 XYZ 状态为 missing / invalid）。
+    cell_counts / cell_values / cell_sku_shares 的分母一律是**已参与分析**的 SKU，
+    不会因为存在被排除的 SKU 而改变。
+    """
 
     dataframe: pd.DataFrame
     cell_counts: dict[str, int]
@@ -90,6 +98,25 @@ class MatrixResult:
     key_column: str
     value_column: str
     strategies: dict[str, dict[str, str]] = field(default_factory=dict)
+    input_sku_count: int = 0
+    excluded_sku_count: int = 0
+    excluded_by_quality: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def analyzed_sku_count(self) -> int:
+        """实际参与矩阵分析的 SKU 数量。"""
+        return len(self.dataframe)
+
+    @property
+    def coverage_rate(self) -> float:
+        """矩阵分析覆盖率 = 已参与 SKU / 进入合并的 SKU。"""
+        if self.input_sku_count <= 0:
+            return 0.0
+        return self.analyzed_sku_count / self.input_sku_count
+
+    @property
+    def has_exclusions(self) -> bool:
+        return self.excluded_sku_count > 0
 
     @property
     def has_amount(self) -> bool:
@@ -183,6 +210,20 @@ class ABCXYZMatrixAnalyzer:
         merged["矩阵单元"] = (
             merged[self.abc_column].astype(str) + merged[self.xyz_column].astype(str)
         )
+
+        # 覆盖透明度：先记录进入合并的 SKU 总数与被排除的部分，再执行原有的单元过滤。
+        # 分类算法与占比分母（total_skus）保持原样，不因为存在排除项而改变。
+        input_sku_count = len(merged)
+        excluded = merged[~merged["矩阵单元"].isin(CELL_ORDER)]
+        excluded_sku_count = len(excluded)
+        if QUALITY_COLUMN in excluded.columns and excluded_sku_count:
+            excluded_by_quality = {
+                str(key): int(value)
+                for key, value in excluded[QUALITY_COLUMN].value_counts().to_dict().items()
+            }
+        else:
+            excluded_by_quality = {}
+
         merged = merged[merged["矩阵单元"].isin(CELL_ORDER)].reset_index(drop=True)
         if merged.empty:
             raise ValueError("ABC 与 XYZ 分类结果没有可用的交叉矩阵数据。")
@@ -222,6 +263,9 @@ class ABCXYZMatrixAnalyzer:
             key_column=self.key_column,
             value_column=self.value_column,
             strategies={cell: CELL_STRATEGIES[cell] for cell in CELL_ORDER},
+            input_sku_count=input_sku_count,
+            excluded_sku_count=excluded_sku_count,
+            excluded_by_quality=excluded_by_quality,
         )
 
     @staticmethod

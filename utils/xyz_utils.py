@@ -19,13 +19,31 @@ UNCLASSIFIED = "未分类"
 class XYZResult:
     dataframe: pd.DataFrame
     counts: dict[str, int]
-    mean_cv: float
+    mean_cv: float | None
     status_counts: dict[str, int] = field(default_factory=dict)
+    total_count: int = 0
 
     @property
     def classified_count(self) -> int:
         """实际参与 X / Y / Z 分类的 SKU 数量。"""
         return sum(self.counts.values())
+
+    @property
+    def unclassified_count(self) -> int:
+        """未参与正常 XYZ 分类的 SKU 数量（missing + invalid）。"""
+        return max(0, self.total_count - self.classified_count)
+
+    @property
+    def coverage_rate(self) -> float:
+        """分类覆盖率 = 有效分类 SKU / 总 SKU。"""
+        if self.total_count <= 0:
+            return 0.0
+        return self.classified_count / self.total_count
+
+    @property
+    def has_valid_data(self) -> bool:
+        """是否存在可参与分类的 SKU；为 False 时 mean_cv 必为 None。"""
+        return self.mean_cv is not None
 
 
 class XYZAnalyzer:
@@ -35,7 +53,8 @@ class XYZAnalyzer:
     - 真实 0 需求是合法数据，正常参与 XYZ 分析；
     - NaN 表示数据缺失，不再 fillna(0)，该 SKU 不参与正常分类（status = missing）；
     - Inf / -Inf 表示非法数值，不参与计算（status = invalid）；
-    - 只有 status = valid 的 SKU 才会得到 X / Y / Z 分类，其余为「未分类」。
+    - 只有 status = valid 的 SKU 才会得到 X / Y / Z 分类，其余为「未分类」；
+    - 没有任何 valid SKU 时 mean_cv 返回 None（表示「暂无有效数据」，而不是 0）。
     """
 
     def __init__(
@@ -117,7 +136,7 @@ class XYZAnalyzer:
         counts = {key: int(counts_raw.get(key, 0)) for key in ("X", "Y", "Z")}
         status_raw = status.value_counts().to_dict()
         status_counts = {key: int(status_raw.get(key, 0)) for key in STATUS_ORDER}
-        # 平均 CV 只统计 valid 的 SKU；完全没有可分类 SKU 时返回 0.0，
-        # 以免把 nan 带入报告等下游文本输出（可分类数量由 counts / status_counts 表达）。
-        mean_cv = float(cv.loc[valid_mask].mean()) if valid_mask.any() else 0.0
-        return XYZResult(result, counts, mean_cv, status_counts)
+        # 平均 CV 只统计 valid 的 SKU；完全没有可分类 SKU 时返回 None，
+        # 由调用方表达为「暂无有效数据」，禁止用 0.0 冒充「波动很小」。
+        mean_cv = float(cv.loc[valid_mask].mean()) if valid_mask.any() else None
+        return XYZResult(result, counts, mean_cv, status_counts, total_count=len(result))
