@@ -306,3 +306,68 @@ def test_report_sample_values_unchanged(sample_dataframe, sample_period_columns,
     assert _value_of(path, "X 类 SKU") == "4"
     assert _value_of(path, "Y 类 SKU") == "6"
     assert _value_of(path, "Z 类 SKU") == "0"
+
+
+# --------------------------------------------------------------------------- #
+# 六、历史周期字段语义披露（V3.5.0-A-03.1）
+# --------------------------------------------------------------------------- #
+
+
+def _with_field_semantics(store, code: str, columns: list[str], detected: int):
+    payload = dict(store.get_analysis("xyz"))
+    payload.update(
+        {
+            "field_semantics": code,
+            "atypical_period_columns": columns,
+            "detected_period_count": detected,
+        }
+    )
+    store.set_analysis("xyz", payload)
+
+
+def test_report_discloses_field_semantics_risk(tmp_path):
+    """手动选择年需求量 / 单价时，报告必须带出字段语义风险。"""
+    dataframe = pd.DataFrame(
+        {
+            "SKU": ["A", "B"],
+            "年消耗金额": [100.0, 50.0],
+            "年需求量": [10, 20],
+            "单价": [1.0, 2.0],
+        }
+    )
+    store, _abc, _xyz = _build_store(dataframe, "年消耗金额", ["年需求量", "单价"])
+    _with_field_semantics(store, "atypical_selection", ["年需求量", "单价"], 0)
+
+    path = generate_word_report(str(tmp_path / "report.docx"), store)
+
+    assert "字段语义" in [key for key, _value in _rows(path)]
+    value = _value_of(path, "字段语义")
+    assert "年需求量" in value
+    assert "建议" in value
+
+
+def test_report_keeps_period_columns_in_sync_with_selection(tmp_path):
+    dataframe = pd.DataFrame(
+        {
+            "SKU": ["A", "B"],
+            "年消耗金额": [100.0, 50.0],
+            "年需求量": [10, 20],
+            "单价": [1.0, 2.0],
+        }
+    )
+    store, _abc, _xyz = _build_store(dataframe, "年消耗金额", ["年需求量", "单价"])
+
+    path = generate_word_report(str(tmp_path / "report.docx"), store)
+
+    assert _value_of(path, "历史周期字段") == "年需求量, 单价"
+
+
+def test_report_omits_field_semantics_row_when_ok(sample_dataframe, sample_period_columns, tmp_path):
+    store, _abc, _xyz = _build_store(
+        sample_dataframe, "年需求量", sample_period_columns
+    )
+    _with_field_semantics(store, "ok", [], 6)
+
+    path = generate_word_report(str(tmp_path / "report.docx"), store)
+
+    assert "字段语义" not in [key for key, _value in _rows(path)]

@@ -216,3 +216,70 @@ def excluded_reason_text(excluded_by_quality: dict[str, int]) -> str:
     return "、".join(
         f"{xyz_status_label(key)} {count}" for key, count in excluded_by_quality.items()
     )
+
+
+# --------------------------------------------------------------------------- #
+# 历史需求周期字段的语义提示（判定见 utils/field_utils.py）
+# --------------------------------------------------------------------------- #
+
+# code -> (标题, 描述模板, 建议动作)
+FIELD_NOTICE_TEXT: dict[str, tuple[str, str, str]] = {
+    "ok": (
+        "字段语义正常",
+        "所选字段符合连续历史需求周期语义。",
+        "",
+    ),
+    "atypical_selection": (
+        "所选字段可能不是连续历史需求周期",
+        "当前选择包含 {columns}，这类字段通常不是按周期记录的需求量。",
+        "选择连续历史需求周期字段，例如月度需求量；年需求量、单价等字段不建议作为 XYZ 历史需求周期。",
+    ),
+    "no_period_fields": (
+        "未自动识别到历史需求周期字段",
+        "当前数据中没有明显可识别的连续历史需求周期字段。",
+        "手动选择连续历史需求字段；若列名不规范，可先调整列名后重新导入。",
+    ),
+    "few_period_fields": (
+        "历史周期字段数量偏少",
+        "当前仅识别到 {count} 个疑似历史周期字段，可能不足以构成完整历史序列。",
+        "检查字段映射，确认历史周期字段是否完整。",
+    ),
+}
+
+
+def describe_field_notice(code: str, **params) -> tuple[str, str, str]:
+    """返回字段语义提示的（标题, 描述, 建议动作）。"""
+    title, description, action = FIELD_NOTICE_TEXT.get(
+        code, ("字段语义提示", "", "")
+    )
+    try:
+        return title.format(**params), description.format(**params), action.format(**params)
+    except (KeyError, IndexError):
+        return title, description, action
+
+
+def field_notice_line(code: str, **params) -> str:
+    """把字段语义提示压缩成一行，供页面结果区与报告使用。语义正常时返回空串。"""
+    if code == "ok":
+        return ""
+    title, description, action = describe_field_notice(code, **params)
+    parts = [f"注意：{title}。"]
+    if description:
+        parts.append(description)
+    if action:
+        parts.append(f"建议：{action}")
+    return "".join(parts)
+
+
+def describe_field_detection(detection) -> str:
+    """把识别结果转成控制区的一句提示，告诉用户自动选中了什么。"""
+    period_columns = list(getattr(detection, "period_columns", []) or [])
+    possible_columns = list(getattr(detection, "possible_columns", []) or [])
+
+    if period_columns:
+        shown = "、".join(period_columns[:3])
+        suffix = f" 等 {len(period_columns)} 个" if len(period_columns) > 3 else ""
+        return f"已自动识别并默认选中 {len(period_columns)} 个历史需求周期字段：{shown}{suffix}。"
+    if possible_columns:
+        return "未识别到明确的连续历史需求周期字段，以下字段可能相关，请确认后手动选择。"
+    return "未自动识别到明确的历史需求周期字段，请手动选择连续历史需求字段。"

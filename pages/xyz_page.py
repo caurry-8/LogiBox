@@ -20,7 +20,13 @@ from PySide6.QtWidgets import (
 
 from utils.data_store import DataStore
 from utils.excel_utils import export_dataframe
-from utils.quality_text import format_cell_value, xyz_status_label
+from utils.field_utils import assess_period_selection, detect_period_fields
+from utils.quality_text import (
+    describe_field_detection,
+    field_notice_line,
+    format_cell_value,
+    xyz_status_label,
+)
 from utils.xyz_utils import QUALITY_COLUMN, STATUS_INVALID, STATUS_MISSING, XYZAnalyzer
 from widgets.metric_card import MetricCard
 
@@ -99,6 +105,12 @@ class XYZPage(QWidget):
         controls_layout.addWidget(export, 2, 3)
         root.addWidget(controls)
 
+        # 字段语义提示：说明自动识别与默认选中的结果，不弹窗
+        self.field_note = QLabel("")
+        self.field_note.setObjectName("analysisNote")
+        self.field_note.setWordWrap(True)
+        root.addWidget(self.field_note)
+
         metrics = QHBoxLayout()
         self.card_x = MetricCard("X 类", "--", "#28C7FA", "需求稳定")
         self.card_y = MetricCard("Y 类", "--", "#6C7BFF", "需求波动")
@@ -130,14 +142,28 @@ class XYZPage(QWidget):
         root.addWidget(splitter, 1)
 
     def refresh_columns(self) -> None:
+        """重建候选字段列表。
+
+        字段语义由 utils/field_utils.py 保守识别：
+        - 识别到的高置信历史周期字段**默认勾选**，让用户不必自己猜；
+        - 明确不属于历史周期的字段（年需求量、单价等）排在列表末尾且不默认勾选，
+          但仍然保留可手动选择的能力；
+        - 识别不到时不猜测，只给出提示。
+        """
+        detection = detect_period_fields(self.store.numeric_columns())
+        period_set = set(detection.period_columns)
+
         self.period_list.clear()
-        for column in self.store.numeric_columns():
+        for column in detection.ordered_columns():
             item = QListWidgetItem(column)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Unchecked)
+            item.setCheckState(Qt.Checked if column in period_set else Qt.Unchecked)
             self.period_list.addItem(item)
-        # 数据源变化后旧结果失效，覆盖说明一并复位
+
+        self.field_note.setText(describe_field_detection(detection))
+        # 数据源变化后旧结果失效，覆盖说明与警示样式一并复位
         self.coverage_note.setText("完成分析后显示数据覆盖情况。")
+        self._set_note_warning(self.coverage_note, False)
 
     def _selected_periods(self) -> list[str]:
         columns = []
@@ -160,6 +186,10 @@ class XYZPage(QWidget):
             QMessageBox.warning(self, "参数错误", "X 类阈值必须小于 Y 类阈值。")
             return
 
+        # 字段语义评估：允许计算，但语义可疑时要在结果区明确提示（WARNING，不阻断）
+        detection = detect_period_fields(self.store.numeric_columns())
+        assessment = assess_period_selection(periods, detection)
+
         try:
             result = XYZAnalyzer(
                 df,
@@ -180,7 +210,8 @@ class XYZPage(QWidget):
             self.card_z.set_hint(
                 self._share_hint("需求波动较大", result.counts["Z"], classified)
             )
-            self.coverage_note.setText(self._coverage_text(result))
+            self.coverage_note.setText(self._coverage_text(result, assessment))
+            self._set_note_warning(self.coverage_note, not assessment.is_ok)
             self.status.setText("分析完成")
             self._refresh_table()
             self.store.set_analysis(
@@ -192,6 +223,9 @@ class XYZPage(QWidget):
                     "status_counts": result.status_counts,
                     "total_count": result.total_count,
                     "period_columns": periods,
+                    "field_semantics": assessment.code,
+                    "atypical_period_columns": assessment.atypical_selected,
+                    "detected_period_count": assessment.period_count,
                     "x_rate": self.x_spin.value(),
                     "y_rate": self.y_spin.value(),
                 },
@@ -208,14 +242,23 @@ class XYZPage(QWidget):
         return f"{label} · 占已分类 SKU 的 {count / classified:.1%}"
 
     @staticmethod
-    def _coverage_text(result) -> str:
-        """数据覆盖说明：总量、有效分类、未分类原因、平均 CV 口径。"""
+    def _coverage_text(result, assessment=None) -> str:
+        """数据覆盖说明：字段语义提示、总量、有效分类、未分类原因、平均 CV 口径。"""
         classified = result.classified_count
         total = result.total_count
-        lines = [
+        lines = []
+        if assessment is not None and not assessment.is_ok:
+            lines.append(
+                field_notice_line(
+                    assessment.code,
+                    columns="、".join(assessment.atypical_selected),
+                    count=assessment.period_count,
+                )
+            )
+        lines.append(
             f"数据覆盖：有效分类 {classified} / 总 SKU {total}"
             f"（覆盖率 {result.coverage_rate:.1%}）"
-        ]
+        )
         if result.unclassified_count:
             missing = result.status_counts.get(STATUS_MISSING, 0)
             invalid = result.status_counts.get(STATUS_INVALID, 0)
@@ -229,6 +272,13 @@ class XYZPage(QWidget):
             lines.append(f"平均 CV：{result.mean_cv:.4f}（基于 {classified} 个有效 SKU）")
         lines.append("X / Y / Z 分布基于已完成有效分类的 SKU。")
         return "\n".join(lines)
+
+    @staticmethod
+    def _set_note_warning(label, warn: bool) -> None:
+        """切换说明标签的警示样式（字段语义可疑时为 WARNING，不弹窗）。"""
+        label.setProperty("warn", "true" if warn else "false")
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def _refresh_table(self) -> None:
         if self.result_df is None:

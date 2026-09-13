@@ -414,6 +414,11 @@ QScrollBar::sub-line:vertical {
     border: 1px solid #238636;
 }
 
+#analysisNote[warn="true"] {
+    color: #d29922;
+    border: 1px solid #9e6a03;
+}
+
 QTabWidget::pane {
     background: #161b22;
     border: 1px solid #30363d;

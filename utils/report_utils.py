@@ -11,6 +11,7 @@ from utils.matrix_utils import CELL_ORDER, CELL_STRATEGIES
 from utils.quality_text import (
     coverage_text,
     excluded_reason_text,
+    field_notice_line,
     format_issue_line,
     status_label,
 )
@@ -130,6 +131,19 @@ def generate_word_report(filename: str, store: DataStore) -> str:
             ("Z 类 SKU", counts.get("Z", 0)),
             ("平均 CV", _format_mean_cv(xyz.get("mean_cv"))),
         ]
+        # 字段语义风险：只在存在风险时追加，避免正常报告出现无意义行
+        field_code = xyz.get("field_semantics")
+        if field_code and field_code != "ok":
+            rows.append(
+                (
+                    "字段语义",
+                    field_notice_line(
+                        field_code,
+                        columns="、".join(xyz.get("atypical_period_columns") or []),
+                        count=xyz.get("detected_period_count", 0),
+                    ),
+                )
+            )
         total_count = xyz.get("total_count")
         if total_count:
             total_count = int(total_count)
