@@ -9,6 +9,7 @@ from core.theme import load_stylesheet
 from pages.about_page import AboutPage
 from pages.abc_page import ABCPage
 from pages.dashboard import DashboardPage
+from pages.decision_page import DecisionPage
 from pages.eoq_page import EOQPage
 from pages.import_page import ImportPage
 from pages.matrix_page import MatrixPage
@@ -91,6 +92,13 @@ class MainWindow(QMainWindow):
                 "安全库存 / ROP",
                 "库存分析",
                 lambda: SafetyPage(self.store),
+            ),
+            PageDefinition(
+                "decision",
+                "决策工作台",
+                "决策工作台",
+                "决策",
+                lambda: DecisionPage(self.store),
             ),
             PageDefinition(
                 "report",

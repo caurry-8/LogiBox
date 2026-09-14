@@ -46,6 +46,7 @@ from utils.decision_utils import (
     SUMMARY_READY,
     DecisionItem,
     DecisionSummary,
+    category_rule,
 )
 
 STATUS_LABELS = {
@@ -102,6 +103,12 @@ NEXT_ACTION_TEXT = {
     NEXT_REVIEW_UNCLASSIFIED: "确认未参与分类的 SKU 数据是否完整",
     NEXT_REVIEW_PERIOD_FIELDS: "检查 XYZ 的历史周期字段选择",
     NEXT_RUN_INVENTORY_MODELS: "补充 EOQ / 安全库存计算以完善补货参数",
+}
+
+# 库存决策模型的展示名（用于「模型未就绪」提示）
+MODEL_LABELS = {
+    "eoq": "EOQ 经济订货",
+    "safety": "安全库存 / ROP",
 }
 
 
@@ -178,6 +185,25 @@ def describe_unclassified(summary: DecisionSummary) -> str:
 
 def describe_next_actions(summary: DecisionSummary) -> list[str]:
     return [next_action_label(code) for code in summary.next_actions]
+
+
+def describe_risk_categories_detail(summary: DecisionSummary) -> list[str]:
+    """风险集中的矩阵单元明细，例如「AX · 高优先级 · 3 个 SKU」。"""
+    lines: list[str] = []
+    for category, count in summary.risk_category_counts.items():
+        priority = priority_label(category_rule(category).priority)
+        lines.append(f"{category} · {priority} · {count} 个 SKU")
+    return lines
+
+
+def describe_model_readiness(summary: DecisionSummary) -> str:
+    """库存决策模型（EOQ / 安全库存）的就绪度说明。"""
+    if not summary.is_ready:
+        return ""
+    if not summary.missing_models:
+        return "EOQ 与安全库存均已计算，补货参数完整。"
+    missing = "、".join(MODEL_LABELS.get(key, key) for key in summary.missing_models)
+    return f"{missing} 尚未计算，补货参数不完整。"
 
 
 def describe_item_line(item: DecisionItem) -> str:
